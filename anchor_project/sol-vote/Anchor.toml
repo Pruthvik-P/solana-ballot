@@ -8,12 +8,15 @@ skip-lint = false
 [programs.localnet]
 sol_vote = "3pR1X3YKWYNEtniUAC9cDQMBmyxK9eEYmW36NQwZF25f"
 
+[programs.devnet]
+sol_vote = "3pR1X3YKWYNEtniUAC9cDQMBmyxK9eEYmW36NQwZF25f"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+cluster = "devnet"
+wallet = "/home/pruthvik/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

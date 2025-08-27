@@ -1,0 +1,1 @@
+import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack';
