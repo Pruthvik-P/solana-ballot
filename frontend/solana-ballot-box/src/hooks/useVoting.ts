@@ -120,169 +120,174 @@ export function useVoting() {
   }, [program, wallet, programId, programLoading, idlError, checkInitialized]);
 
   const createPoll = useCallback(
-    async (description: string, start: Date, end: Date) => {
-      if (programLoading)
-        return showToast.info("Program loading"), { success: false };
-      if (!program || !wallet)
-        return showToast.error("Wallet/program missing"), { success: false };
-      if (!hasIdl) return showToast.error("IDL not loaded"), { success: false };
+  async (description: string, start: Date, end: Date) => {
+    if (programLoading)
+      return showToast.info("Program loading"), { success: false };
+    if (!program || !wallet)
+      return showToast.error("Wallet/program missing"), { success: false };
+    if (!hasIdl) return showToast.error("IDL not loaded"), { success: false };
 
-      if (start >= end)
-        return showToast.error("End must be after start"), { success: false };
-      if (Date.now() >= start.getTime())
-        return showToast.error("Start must be in future"), { success: false };
+    if (start >= end)
+      return showToast.error("End must be after start"), { success: false };
+    if (Date.now() >= start.getTime())
+      return showToast.error("Start must be in future"), { success: false };
 
-      setLoading(true);
-      try {
-        if (!(await checkInitialized()))
-          return (
-            showToast.error("Initialize program first"), { success: false }
-          );
-
-        const [counterPda] = await getCounterPDA(programId);
-        const counterAcct = await program.account.counter.fetch(counterPda);
-        const nextPollId = bnToNumber(counterAcct.count) + 1;
-
-        const pollKp = Keypair.generate();
-
-        const startSec = Math.floor(start.getTime() / 1000);
-        const endSec = Math.floor(end.getTime() / 1000);
-        const counterAccount = await program.account.counter.fetch(counterPda);
-
-        // derive poll PDA using the correct counter value
-        const [pollPda] = PublicKey.findProgramAddressSync(
-          [new BN(counterAccount.count + 1).toArrayLike(Buffer, "le", 8)],
-          program.programId
+    setLoading(true);
+    try {
+      if (!(await checkInitialized()))
+        return (
+          showToast.error("Initialize program first"), { success: false }
         );
 
-        const tx = await program.methods
-          .createPoll(description, new BN(startSec), new BN(endSec))
-          .accounts({
-            user: wallet.publicKey,
-            poll: pollPda,
-            counter: counterPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-        showToast.success(`Poll #${nextPollId} created`);
-        return {
-          success: true,
-          pollId: nextPollId,
-          pollAddress: pollKp.publicKey.toString(),
-          signature: tx,
-        };
-      } catch (err: any) {
-        console.error("Create poll error:", err);
-        showToast.error(handleTransactionError(err));
-        return { success: false };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [program, wallet, programId, programLoading, hasIdl, checkInitialized]
-  );
+      const [counterPda] = await getCounterPDA(programId);
+      const counterAcct = await program.account.counter.fetch(counterPda);
+      const nextPollId = bnToNumber(counterAcct.count) + 1;
+
+      const startSec = Math.floor(start.getTime() / 1000);
+      const endSec = Math.floor(end.getTime() / 1000);
+
+      // Use the consistent getPollPDA function
+      const [pollPda] = await getPollPDA(new BN(nextPollId), programId);
+
+      const tx = await program.methods
+        .createPoll(description, new BN(startSec), new BN(endSec))
+        .accounts({
+          user: wallet.publicKey,
+          poll: pollPda,
+          counter: counterPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+        
+      showToast.success(`Poll #${nextPollId} created`);
+      return {
+        success: true,
+        pollId: nextPollId,
+        pollAddress: pollPda.toString(),
+        signature: tx,
+      };
+    } catch (err: any) {
+      console.error("Create poll error:", err);
+      showToast.error(handleTransactionError(err));
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  },
+  [program, wallet, programId, programLoading, hasIdl, checkInitialized]
+);
+
 
   const registerCandidate = useCallback(
-    async (pollId: number, name: string) => {
-      if (!name.trim())
-        return showToast.error("Name required"), { success: false };
-      if (programLoading)
-        return showToast.info("Program loading"), { success: false };
-      if (!program || !wallet)
-        return showToast.error("Wallet/program"), { success: false };
+  async (pollId: number, name: string) => {
+    if (!name.trim())
+      return showToast.error("Name required"), { success: false };
+    if (programLoading)
+      return showToast.info("Program loading"), { success: false };
+    if (!program || !wallet)
+      return showToast.error("Wallet/program"), { success: false };
 
-      setLoading(true);
-      try {
-        if (!(await pollExists(pollId)))
-          return showToast.error("Poll missing"), { success: false };
+    setLoading(true);
+    try {
+      if (!(await pollExists(pollId)))
+        return showToast.error("Poll missing"), { success: false };
 
-        const pollIdBN = new BN(pollId);
-        const [pollPda] = await getPollPDA(pollIdBN, programId);
-        const [registrationsPda] = await getRegistrationsPDA(programId);
+      const pollIdBN = new BN(pollId);
+      const [pollPda] = await getPollPDA(pollIdBN, programId);
+      const [registrationsPda] = await getRegistrationsPDA(programId);
 
-        const registrations = await program.account.registrations.fetch(
-          registrationsPda
-        );
-        const nextCid = bnToNumber(registrations.count) + 1;
-        const [candidatePda] = await getCandidatePDA(
-          pollIdBN,
-          new BN(nextCid),
-          programId
-        );
+      // Get the current registrations count to determine next candidate ID
+      const registrations = await program.account.registrations.fetch(
+        registrationsPda
+      );
+      const nextCandidateId = bnToNumber(registrations.count) + 1;
+      
+      // Use the correct PDA derivation: poll_id + candidate_id
+      const [candidatePda] = await getCandidatePDA(
+        pollIdBN,
+        new BN(nextCandidateId),
+        programId
+      );
 
-        const sig = await program.methods
-          .registerCandidate(pollIdBN, name)
-          .accounts({
-            user: wallet.publicKey,
-            poll: pollPda,
-            candidate: candidatePda,
-            registrations: registrationsPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
+      const sig = await program.methods
+        .registerCandidate(pollIdBN, name)
+        .accounts({
+          user: wallet.publicKey,
+          poll: pollPda,
+          candidate: candidatePda,
+          registrations: registrationsPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-        showToast.success(`Candidate #${nextCid} registered`);
-        return { success: true, candidateId: nextCid, signature: sig };
-      } catch (err: any) {
-        showToast.error(handleTransactionError(err));
-        return { success: false };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [program, wallet, programId, programLoading, pollExists]
-  );
+      showToast.success(`Candidate #${nextCandidateId} registered`);
+      return { success: true, candidateId: nextCandidateId, signature: sig };
+    } catch (err: any) {
+      console.error("Register candidate error:", err);
+      showToast.error(handleTransactionError(err));
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  },
+  [program, wallet, programId, programLoading, pollExists]
+);
+
 
   const vote = useCallback(
-    async (pollId: number, cid: number) => {
-      if (programLoading)
-        return showToast.info("Program loading"), { success: false };
-      if (!program || !wallet)
-        return showToast.error("Wallet/program"), { success: false };
+  async (pollId: number, cid: number) => {
+    if (programLoading)
+      return showToast.info("Program loading"), { success: false };
+    if (!program || !wallet)
+      return showToast.error("Wallet/program"), { success: false };
 
-      setLoading(true);
-      try {
-        if (!(await pollExists(pollId)))
-          return showToast.error("Poll missing"), { success: false };
+    setLoading(true);
+    try {
+      if (!(await pollExists(pollId)))
+        return showToast.error("Poll missing"), { success: false };
 
-        const pollIdBN = new BN(pollId);
-        const cidBN = new BN(cid);
-        const [pollPda] = await getPollPDA(pollIdBN, programId);
-        const [candidatePda] = await getCandidatePDA(
-          pollIdBN,
-          cidBN,
-          programId
-        );
-        const [voterPda] = await getVoterPDA(
-          pollIdBN,
-          wallet.publicKey,
-          programId
-        );
-        const [registrationsPda] = await getRegistrationsPDA(programId);
+      const pollIdBN = new BN(pollId);
+      const cidBN = new BN(cid);
+      const [pollPda] = await getPollPDA(pollIdBN, programId);
+      const [candidatePda] = await getCandidatePDA(
+        pollIdBN,
+        cidBN,
+        programId
+      );
+      const [voterPda] = await getVoterPDA(
+        pollIdBN,
+        wallet.publicKey,
+        programId
+      );
+      const [registrationsPda] = await getRegistrationsPDA(programId);
 
-        const sig = await program.methods
-          .vote(pollIdBN, cidBN)
-          .accounts({
-            user: wallet.publicKey,
-            poll: pollPda,
-            candidate: candidatePda,
-            voter: voterPda,
-            registrations: registrationsPda,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
+      const sig = await program.methods
+        .vote(pollIdBN, cidBN)
+        .accounts({
+          user: wallet.publicKey,
+          poll: pollPda,
+          candidate: candidatePda,
+          voter: voterPda,
+          registrations: registrationsPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-        showToast.success("Vote cast");
-        return { success: true, signature: sig };
-      } catch (err: any) {
-        showToast.error(handleTransactionError(err));
-        return { success: false };
-      } finally {
-        setLoading(false);
-      }
-    },
-    [program, wallet, programId, programLoading, pollExists]
-  );
+      showToast.success("Vote cast successfully!");
+      
+      // ✅ ADD: Force refresh of candidate data
+      // This will trigger a re-fetch of candidate data in components that use this hook
+      return { success: true, signature: sig, shouldRefresh: true };
+    } catch (err: any) {
+      showToast.error(handleTransactionError(err));
+      return { success: false };
+    } finally {
+      setLoading(false);
+    }
+  },
+  [program, wallet, programId, programLoading, pollExists]
+);
+
 
   const getPoll = useCallback(
     async (pollId: number) => {
@@ -369,33 +374,60 @@ export function useVoting() {
   }, [program, programId, pollExists, getPoll]);
 
   const getPollCandidates = useCallback(
-    async (pollId: number): Promise<CandidateData[]> => {
-      if (!program) return [];
-      if (!(await pollExists(pollId))) return [];
+  async (pollId: number): Promise<CandidateData[]> => {
+    if (!program) {
+      console.log("❌ Program not available");
+      return [];
+    }
+    
+    console.log("🔍 Fetching candidates for poll:", pollId);
 
-      const poll = await getPoll(pollId);
-      if (!poll) return [];
+    try {
+      // Method 1: Get ALL candidate accounts first (no filtering)
+      console.log("📊 Fetching all candidate accounts...");
+      const allCandidates = await program.account.candidate.all();
+      console.log("📊 Total candidate accounts found:", allCandidates.length);
 
-      const count = bnToNumber(poll.candidates);
-      const res: CandidateData[] = [];
-      for (let cid = 1; cid <= count; cid++) {
-        const c = await getCandidate(pollId, cid);
-        if (!c) continue;
-        res.push({
-          id: cid,
-          pollId,
-          name: c.name,
-          votes: bnToNumber(c.votes),
+      // Method 2: Filter client-side by poll_id
+      const pollCandidates = allCandidates.filter((candidateAccount) => {
+        const candidate = candidateAccount.account;
+        const candidatePollId = bnToNumber(candidate.pollId);
+        console.log(`🔍 Candidate ${bnToNumber(candidate.cid)}: poll_id=${candidatePollId}, target=${pollId}`);
+        return candidatePollId === pollId;
+      });
+
+      console.log("📊 Candidates for this poll:", pollCandidates.length);
+
+      const candidates: CandidateData[] = pollCandidates.map((candidateAccount) => {
+        const candidate = candidateAccount.account;
+        return {
+          id: bnToNumber(candidate.cid),
+          pollId: pollId,
+          name: candidate.name,
+          votes: bnToNumber(candidate.votes),
           bio: `Candidate for Poll #${pollId}`,
           percentage: 0,
-        });
-      }
-      const total = res.reduce((s, c) => s + c.votes, 0);
-      res.forEach((c) => (c.percentage = total ? (c.votes / total) * 100 : 0));
-      return res;
-    },
-    [program, pollExists, getPoll, getCandidate]
-  );
+        };
+      });
+
+      // Calculate percentages
+      const totalVotes = candidates.reduce((sum, c) => sum + c.votes, 0);
+      candidates.forEach((c) => {
+        c.percentage = totalVotes > 0 ? (c.votes / totalVotes) * 100 : 0;
+      });
+
+      console.log("✅ Final candidates:", candidates);
+      return candidates.sort((a, b) => a.id - b.id);
+
+    } catch (error) {
+      console.error("❌ Error fetching candidates:", error);
+      return [];
+    }
+  },
+  [program]
+);
+
+
 
   return {
     initialize,

@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useVoting } from "../../hooks/useVoting";
+import { useVoting, } from "../../hooks/useVoting";
 import { ArrowLeft, User, Vote, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
@@ -22,7 +22,7 @@ interface VotingInterfaceProps {
 export default function VotingInterface({ pollId }: VotingInterfaceProps) {
   const router = useRouter();
   const { connected, publicKey } = useWallet();
-  const { vote, loading } = useVoting();
+  const { vote, loading, getPollCandidates } = useVoting();
 
   const [poll, setPoll] = useState<any>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -56,15 +56,22 @@ export default function VotingInterface({ pollId }: VotingInterfaceProps) {
     setHasVoted(false);
   }, [pollId]);
 
-  const handleVote = async () => {
+  const refreshCandidates = useCallback(async () => {
+  if (pollId) {
+    const updatedCandidates = await getPollCandidates(pollId);
+    setCandidates(updatedCandidates);
+  }
+}, [pollId, getPollCandidates]);
+
+  const handleVote = async (candidateId: number) => {
     if (!selectedCandidate || !connected) return;
 
     setIsConfirming(true);
     try {
-      const result = await vote(parseInt(pollId), selectedCandidate);
-      if (result) {
+      const result = await vote(pollId, candidateId);
+      if (result.success) {
         setHasVoted(true);
-        // Update local candidate vote count
+        await refreshCandidates()
         setCandidates(prev => 
           prev.map(c => 
             c.id === selectedCandidate 

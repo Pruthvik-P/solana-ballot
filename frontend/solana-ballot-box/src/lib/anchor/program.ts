@@ -52,7 +52,6 @@ export const getPollPDA = async (
 ): Promise<[PublicKey, number]> => {
   return await PublicKey.findProgramAddressSync(
     [
-      Buffer.from("poll"),
       pollId.toArrayLike(Buffer, "le", 8)
     ],
     programId
@@ -79,12 +78,10 @@ export const getCandidatePDA = async (
   pollId: BN,
   candidateId: BN,
   programId: PublicKey,
-  userPublicKey?: PublicKey
 ): Promise<[PublicKey, number]> => {
   // Default pattern - will be updated after detection
   return await PublicKey.findProgramAddressSync(
     [
-      Buffer.from("candidate"),
       pollId.toArrayLike(Buffer, "le", 8),
       candidateId.toArrayLike(Buffer, "le", 8)
     ],
