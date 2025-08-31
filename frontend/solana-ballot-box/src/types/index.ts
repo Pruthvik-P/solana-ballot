@@ -42,6 +42,7 @@ export interface Registrations {
 }
 
 // Frontend-specific interfaces
+// src/types/voting.ts
 export interface PollCardData {
   id: number;
   title: string;
@@ -51,19 +52,27 @@ export interface PollCardData {
   candidateCount: number;
   totalVotes: number;
   isActive: boolean;
-  status: 'draft' | 'active' | 'ended';
-  candidates?: CandidateData[];
+  status: "draft" | "active" | "ended";
 }
 
 export interface CandidateData {
   id: number;
   pollId: number;
   name: string;
-  votes: number;
-  bio?: string;
-  imageUrl?: string;
-  percentage?: number;
+  votes: number;  
+  bio: string;
+  percentage: number;
 }
+
+export interface VotingContextType {
+  polls: PollCardData[];
+  candidates: CandidateData[];
+  loading: boolean;
+  error: string | null;
+  refreshPolls: () => Promise<void>;
+  refreshCandidates: (pollId: number) => Promise<void>;
+}
+
 
 // Form data interfaces
 export interface PollFormData {

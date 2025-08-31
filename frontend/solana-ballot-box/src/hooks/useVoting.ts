@@ -249,16 +249,8 @@ export function useVoting() {
       const pollIdBN = new BN(pollId);
       const cidBN = new BN(cid);
       const [pollPda] = await getPollPDA(pollIdBN, programId);
-      const [candidatePda] = await getCandidatePDA(
-        pollIdBN,
-        cidBN,
-        programId
-      );
-      const [voterPda] = await getVoterPDA(
-        pollIdBN,
-        wallet.publicKey,
-        programId
-      );
+      const [candidatePda] = await getCandidatePDA(pollIdBN, cidBN, programId);
+      const [voterPda] = await getVoterPDA(pollIdBN, wallet.publicKey, programId);
       const [registrationsPda] = await getRegistrationsPDA(programId);
 
       const sig = await program.methods
@@ -274,10 +266,11 @@ export function useVoting() {
         .rpc();
 
       showToast.success("Vote cast successfully!");
-      
-      // ✅ ADD: Force refresh of candidate data
-      // This will trigger a re-fetch of candidate data in components that use this hook
-      return { success: true, signature: sig, shouldRefresh: true };
+
+      // *** Key step: Refetch updated candidates ***
+      await getPollCandidates(pollId);
+
+      return { success: true, signature: sig };
     } catch (err: any) {
       showToast.error(handleTransactionError(err));
       return { success: false };
@@ -285,8 +278,9 @@ export function useVoting() {
       setLoading(false);
     }
   },
-  [program, wallet, programId, programLoading, pollExists]
+  [program, wallet, programId, programLoading, pollExists, getPollCandidates]
 );
+
 
 
   const getPoll = useCallback(

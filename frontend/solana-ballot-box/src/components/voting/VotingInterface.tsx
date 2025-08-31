@@ -56,6 +56,12 @@ export default function VotingInterface({ pollId }: VotingInterfaceProps) {
     setHasVoted(false);
   }, [pollId]);
 
+  const loadCandidates = useCallback(async () => {
+  if (!pollId) return;
+  const list = await getPollCandidates(pollId);
+  setCandidates(list);
+}, [pollId, getPollCandidates]);
+
   const refreshCandidates = useCallback(async () => {
   if (pollId) {
     const updatedCandidates = await getPollCandidates(pollId);
@@ -70,6 +76,7 @@ export default function VotingInterface({ pollId }: VotingInterfaceProps) {
     try {
       const result = await vote(pollId, candidateId);
       if (result.success) {
+        await loadCandidates();
         setHasVoted(true);
         await refreshCandidates()
         setCandidates(prev => 
