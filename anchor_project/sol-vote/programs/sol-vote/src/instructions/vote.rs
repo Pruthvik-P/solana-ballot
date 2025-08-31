@@ -24,6 +24,7 @@ pub fn vote(ctx: Context<VoteCandidate>, poll_id: u64, cid: u64) -> Result<()> {
     voter.poll_id = poll_id;
     voter.cid = cid;
     voter.has_voted = true;
+    candidate.votes = 1;
 
     Ok(())
 }
